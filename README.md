@@ -5,7 +5,7 @@
 ## Features
 
 - **Automatic Reconnection**: Automatically attempts to reconnect to the WebSocket server on connection loss, with configurable retry attempts and delay.
-- **Data Decoding**: Supports custom data decoding using the `decode` function, allowing integration with libraries like `zod`, `MessagePack`, and more.
+- **Data Encoding / Decoding**: Supports custom data decoding using the `encode` / `decode` function, allowing integration with libraries like `zod`, `MessagePack`, and more.
 - **Async Iteration**: Implements `AsyncIterable`, allowing you to use `for await...of` to process incoming WebSocket messages easily.
 - **Error Handling**: Customizable error handling through the `onError` callback.
 - **Automatic Resource Cleanup**: Implements `AsyncDisposable`, enabling you to use `await using` syntax with `Socket.connect(...)`. This ensures that the WebSocket connection is automatically disconnected when it goes out of scope, simplifying resource management in asynchronous functions.
@@ -28,35 +28,31 @@ npx jsr add @rj/socket
 ### Event-driven example
 
 ```ts
-import { Socket } from '@rj/socket';
+import { Socket } from "@rj/socket";
 
-// The `decode` function is the only required option.
-// It is what ultimately makes `Socket` type-safe.
-const socket = Socket.connect('wss://example.com/ws', {
-  decode: (data) => JSON.parse(String(data))
-});
+const socket = Socket.connect("wss://example.com/ws");
 
 // Returns a cleanup function.
-const unsubscribe = socket.subscribe((data) => {
-  
-})
-
+const unsubscribe = socket.subscribe((data) => {});
 ```
 
 ### Async Iterable
 
 ```ts
-import { Socket } from '@rj/socket';
+import { Socket } from "@rj/socket";
 
 async function main(): Promise<void> {
-  const socket = Socket.connect('wss://example.com/ws', {
-    decode: (data) => JSON.parse(String(data))
+  const socket = Socket.connect("wss://example.com/ws", {
+    decode: (data) => JSON.parse(String(data)),
   });
-  
-  // Socket implements `AsyncIterable` so you can use `for..of` syntax.
+
+  // Socket implements `AsyncIterable` so you can use `for await..of` syntax.
   for await (const msg of socket) {
     // Process message
   }
+
+  // Manually disconnect
+  socket.disconnect();
 }
 ```
 
@@ -70,7 +66,7 @@ async function main(): Promise<void> {
   await using socket = Socket.connect('wss://example.com/ws', {
     decode: (data) => JSON.parse(String(data))
   });
-  
+
   for await (const msg of socket) {
     // Process message
   }
@@ -84,23 +80,26 @@ async function main(): Promise<void> {
 ### Usage With Zod
 
 ```ts
-import { Socket } from '@rj/socket';
-import { z } from 'zod';
+import { Socket } from "@rj/socket";
+import { z } from "zod";
 
-const SocketMessageSchema = z
-	.object({
-		type: z.literal("user-connected"),
-		userId: z.number(),
-	})
-	.or(
-		z.object({
-			type: z.literal("new-message"),
-			text: z.string(),
-		}),
-	);
+const IncomingMessageSchema = z
+  .object({
+    type: z.literal("user-connected"),
+    userId: z.number(),
+  })
+  .or(
+    z.object({
+      type: z.literal("new-message"),
+      text: z.string(),
+    })
+  );
 
-const socket = Socket.connect('wss://example.com/ws', {
-  decode: (data) => SocketMessageSchema.parse(JSON.parse(String(data)))
+const socket = Socket.connect("wss://example.com/ws", {
+  decode(data) {
+    const json = JSON.parse(data);
+    return IncomingMessageSchema.parse(json);
+  },
 });
 
 //    ^? Socket<{ type: 'user-connected'; userId: number } | { type: 'new-message'; text: string }>
@@ -109,39 +108,56 @@ socket.subscribe((msg) => {
   // Since we're using `type` as a discriminator, using a switch statement here
   // will result in fully typed data.
   switch (msg.type) {
-    case 'user-connected': {
+    case "user-connected": {
       handleUserConnected(msg.userId);
-      break
+      break;
     }
-    case 'new-message':
+    case "new-message":
       handleNewMessage(msg.text);
-      break
-      
+      break;
   }
-})
+});
 ```
 
 ### Usage With MessagePack
 
 ```ts
-import { Socket } from '@rj/socket';
-import { decode } from '@msgpack/msgpack';
+import { Socket } from "@rj/socket";
+import { encode, decode } from "@msgpack/msgpack";
 
-const socket = Socket.connect('wss://example.com/ws', {
-  binaryType: 'arraybuffer', // <- Set this.
-  decode: (data) => {
+const socket = Socket.connect("wss://example.com/ws", {
+  binaryType: "arraybuffer", // <- Set this.
+  decode(data) {
     const binary = new Uint8Array(data);
+    // Decode using MessagePack
     return decode(binary);
-  }
+  },
+  encode(data) {
+    // Encode using MessagePack
+    return encode(data);
+  },
 });
 
 // Or you can combine MessagePack with zod or any other validation library.
-const socket = Socket.connect('wss://example.com/ws', {
-  binaryType: 'arraybuffer',
+const socket = Socket.connect("wss://example.com/ws", {
+  binaryType: "arraybuffer",
   decode: (data) => {
     const binary = new Uint8Array(data);
+    // Decode using MessagePack
     const decoded = decode(binary);
-    return SocketMessageSchema.parse(decoded);
-  }
+    // Parse using zod
+    return IncomingMessageSchema.parse(decoded);
+  },
+});
+```
+
+## Automatic Reconnection
+
+```ts
+import { Socket } from "@rj/socket";
+
+const socket = Socket.connect("wss://example.com/ws", {
+  reconnectAttempts: 5 // <- Default is `Infinity`,
+  reconnectDelay: 5000 // <- Default is 1000 (1 second).
 });
 ```
