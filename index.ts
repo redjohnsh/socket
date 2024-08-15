@@ -242,7 +242,6 @@ export class Socket<T = unknown> implements AsyncIterable<T>, AsyncDisposable {
 			return;
 		}
 
-		if (this.#isManuallyClosed || !this.#hasConnectedOnce) return;
 		if (this.#currentAttempts < this.#reconnectAttempts) {
 			this.#log(
 				`trying to reconnect (${this.#currentAttempts + 1}/${isInfinity(this.#reconnectAttempts) ? "∞" : this.#reconnectAttempts})`,

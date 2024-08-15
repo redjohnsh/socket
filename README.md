@@ -71,7 +71,6 @@ async function main(): Promise<void> {
     decode: (data) => JSON.parse(String(data))
   });
   
-  // Socket implements `AsyncIterable` so you can use `for..of` syntax.
   for await (const msg of socket) {
     // Process message
   }
@@ -101,7 +100,7 @@ const SocketMessageSchema = z
 	);
 
 const socket = Socket.connect('wss://example.com/ws', {
-  decode: (data) => z.parse(JSON.parse(String(data)))
+  decode: (data) => SocketMessageSchema.parse(JSON.parse(String(data)))
 });
 
 //    ^? Socket<{ type: 'user-connected'; userId: number } | { type: 'new-message'; text: string }>
